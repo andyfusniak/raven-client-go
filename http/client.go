@@ -119,6 +119,26 @@ func (c *Client) ListGroups(ctx context.Context) ([]Group, error) {
 	return container.Data, nil
 }
 
+// GetTemplate fetches a single template by id.
+func (c *Client) GetTemplate(ctx context.Context, templateID string) (*Template, error) {
+	uri := c.buildURL(fmt.Sprintf("templates/%s", templateID), nil)
+	res, err := c.request(http.MethodGet, uri.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "http get request failed")
+	}
+	defer res.Body.Close()
+
+	var container struct {
+		Data *Template `json:"data"`
+	}
+	dec := json.NewDecoder(res.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&container); err != nil {
+		return nil, errors.Wrapf(err, "json decode get template")
+	}
+	return container.Data, nil
+}
+
 // ListTemplates fetches a slice of templates for the current project.
 func (c *Client) ListTemplates(ctx context.Context) ([]Template, error) {
 	// build the URL including query params

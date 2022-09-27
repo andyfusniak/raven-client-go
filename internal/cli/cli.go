@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -44,12 +45,21 @@ func (a *App) Version() string {
 	return a.version
 }
 
+// NewCmdGet get sub command.
+func NewCmdGet() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "get",
+		Short: "Get a single resource",
+	}
+	cmd.AddCommand(NewCmdGetTemplate())
+	return cmd
+}
+
 // NewCmdList list sub command.
 func NewCmdList() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "list",
-		Short:   "List resources",
-		Aliases: []string{"lists"},
+		Use:   "list",
+		Short: "List resources",
 	}
 	cmd.AddCommand(NewCmdListGroups())
 	cmd.AddCommand(NewCmdListProjects())
@@ -61,8 +71,9 @@ func NewCmdList() *cobra.Command {
 // NewCmdListGroups list groups sub command.
 func NewCmdListGroups() *cobra.Command {
 	return &cobra.Command{
-		Use:   "groups",
-		Short: "List groups",
+		Use:     "groups",
+		Short:   "List groups",
+		Aliases: []string{"group"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			app := ctx.Value(AppKey("app")).(*App)
@@ -86,8 +97,9 @@ func NewCmdListGroups() *cobra.Command {
 // NewCmdListProjects list projects sub command.
 func NewCmdListProjects() *cobra.Command {
 	return &cobra.Command{
-		Use:   "projects",
-		Short: "List projects",
+		Use:     "projects",
+		Short:   "List projects",
+		Aliases: []string{"project"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			app := ctx.Value(AppKey("app")).(*App)
@@ -111,8 +123,9 @@ func NewCmdListProjects() *cobra.Command {
 // NewCmdListTemplates list templates sub command.
 func NewCmdListTemplates() *cobra.Command {
 	return &cobra.Command{
-		Use:   "templates",
-		Short: "List templates",
+		Use:     "templates",
+		Short:   "List templates",
+		Aliases: []string{"template"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			app := ctx.Value(AppKey("app")).(*App)
@@ -141,8 +154,9 @@ func NewCmdListTemplates() *cobra.Command {
 // NewCmdListTransports list transports sub command.
 func NewCmdListTransports() *cobra.Command {
 	return &cobra.Command{
-		Use:   "transports",
-		Short: "List transports",
+		Use:     "transports",
+		Short:   "List transports",
+		Aliases: []string{"transport"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			app := ctx.Value(AppKey("app")).(*App)
@@ -195,6 +209,82 @@ func renderTable(w io.Writer, results interface{}, format string, headers []inte
 		return err
 	}
 	return nil
+}
+
+// NewCmdGetTemplate get template sub command.
+func NewCmdGetTemplate() *cobra.Command {
+	return &cobra.Command{
+		Use:     "template TEMPLATE_ID",
+		Short:   "Get a single template",
+		Aliases: []string{"templates"},
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) < 1 {
+				return errors.New("missing TEMPLATE_ID argument")
+			}
+			return nil
+		},
+
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			app := ctx.Value(AppKey("app")).(*App)
+
+			templateID := args[0]
+			result, err := app.HTTPClient.GetTemplate(ctx, templateID)
+			if err != nil {
+				return err
+			}
+
+			if err := renderTemplate(os.Stdout, result); err != nil {
+				return err
+			}
+
+			return nil
+		},
+	}
+}
+
+const checkMark = "✔"
+const crossMark = "✘"
+
+const heavyGreenCheckMark = "✅"
+const heavyRedCrossMark = "❌"
+
+func renderTemplate(w io.Writer, t *http.Template) error {
+	fmt.Fprintf(w, "Template ID:\t\t%s %s\n", t.ID, isTemplateReady(t.TxtTemplateCompiledOK, t.HTMLTemplateCompiledOK))
+	fmt.Fprintf(w, "Project ID:\t\t%s\n", t.ProjectID)
+	fmt.Fprintf(w, "Group ID:\t\t%s\n", t.GroupID)
+	fmt.Fprintf(w, "Last modified:\t\t%v\n", t.ModifiedAt)
+	fmt.Fprintln(w)
+
+	fmt.Fprintf(w, "TEXT: %s %s\n", t.TxtDigest[:7], checkOrCrossWithStatus(t.TxtTemplateCompiledOK, true))
+	fmt.Fprintf(w, "%s\n", t.Txt)
+	fmt.Fprintln(w)
+
+	fmt.Fprintf(w, "HTML: %s %s\n", t.HTMLDigest[:7], checkOrCrossWithStatus(t.HTMLTemplateCompiledOK, true))
+	fmt.Fprintf(w, "%s\n", t.HTML)
+
+	return nil
+}
+
+func checkOrCrossWithStatus(v bool, useHeavy bool) string {
+	if useHeavy {
+		if v {
+			return heavyGreenCheckMark + " Ready"
+		}
+		return heavyRedCrossMark + " Failed to compile"
+	}
+
+	if v {
+		return checkMark + " Ready"
+	}
+	return crossMark + " Failed to compile"
+}
+
+func isTemplateReady(txt, html bool) string {
+	if txt && html {
+		return heavyGreenCheckMark + " Ready"
+	}
+	return heavyRedCrossMark + " Failed to compile"
 }
 
 // NewCmdVersion returns an instance of the version sub command.

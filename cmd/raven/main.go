@@ -47,6 +47,7 @@ func run() error {
 			_ = v.(*cli.App)
 		},
 	}
+	root.AddCommand(cli.NewCmdGet())
 	root.AddCommand(cli.NewCmdList())
 	root.AddCommand(cli.NewCmdVersion(version, gitCommit, endpoint))
 
