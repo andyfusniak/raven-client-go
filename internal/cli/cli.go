@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"text/tabwriter"
 
@@ -50,8 +51,34 @@ func NewCmdList() *cobra.Command {
 		Short:   "List resources",
 		Aliases: []string{"lists"},
 	}
+	cmd.AddCommand(NewCmdListProjects())
 	cmd.AddCommand(NewCmdListTemplates())
 	return cmd
+}
+
+// NewCmdListProjects list projects sub command.
+func NewCmdListProjects() *cobra.Command {
+	return &cobra.Command{
+		Use:   "projects",
+		Short: "List projects",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			app := ctx.Value(AppKey("app")).(*App)
+
+			results, err := app.HTTPClient.ListProjects(ctx, "dXjtqjXayte0fvfAXfTv3uyIjSj2")
+			if err != nil {
+				return err
+			}
+
+			format := "%s\t%s\t%s\n"
+			headers := []interface{}{"Project ID", "Name", "Created"}
+			if err := renderTable(os.Stdout, results, format, headers); err != nil {
+				return fmt.Errorf("list projects failed to render table: %+v", err)
+			}
+
+			return nil
+		},
+	}
 }
 
 // NewCmdListTemplates list templates sub command.
@@ -68,28 +95,12 @@ func NewCmdListTemplates() *cobra.Command {
 				return err
 			}
 
-			tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
 			format := "%s\t%s\t%s\n"
-			headers := []interface{}{
-				"Template ID",
-				"Group ID",
-				"Created",
+			headers := []interface{}{"Template ID", "Group ID", "Created"}
+			if err := renderTable(os.Stdout, results, format, headers); err != nil {
+				return fmt.Errorf("list templates failed to render table: %+v", err)
 			}
 
-			fmt.Fprintf(tw, format, headers...)
-			for _, v := range results {
-				var params []interface{}
-				params = []interface{}{
-					v.ID,
-					v.GroupID,
-					v.CreatedAt,
-				}
-				fmt.Fprintf(tw, format, params...)
-			}
-
-			if err := tw.Flush(); err != nil {
-				return err
-			}
 			var plural string
 			if len(results) > 1 {
 				plural = "s"
@@ -98,6 +109,41 @@ func NewCmdListTemplates() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func renderTable(w io.Writer, results interface{}, format string, headers []interface{}) error {
+	tw := new(tabwriter.Writer).Init(w, 0, 8, 2, ' ', 0)
+
+	fmt.Fprintf(tw, format, headers...)
+
+	switch list := results.(type) {
+	case []http.Project:
+		for _, v := range list {
+			row := []interface{}{
+				v.ID,
+				v.Name,
+				v.CreatedAt,
+			}
+			fmt.Fprintf(tw, format, row...)
+		}
+	case []http.Template:
+		for _, v := range list {
+			row := []interface{}{
+				v.ID,
+				v.GroupID,
+				v.CreatedAt,
+			}
+			fmt.Fprintf(tw, format, row...)
+		}
+
+	default:
+		return fmt.Errorf("unknown results type")
+	}
+
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // NewCmdVersion returns an instance of the version sub command.
