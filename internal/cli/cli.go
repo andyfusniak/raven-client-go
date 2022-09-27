@@ -51,9 +51,35 @@ func NewCmdList() *cobra.Command {
 		Short:   "List resources",
 		Aliases: []string{"lists"},
 	}
+	cmd.AddCommand(NewCmdListGroups())
 	cmd.AddCommand(NewCmdListProjects())
 	cmd.AddCommand(NewCmdListTemplates())
 	return cmd
+}
+
+// NewCmdListGroups list groups sub command.
+func NewCmdListGroups() *cobra.Command {
+	return &cobra.Command{
+		Use:   "groups",
+		Short: "List groups",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			app := ctx.Value(AppKey("app")).(*App)
+
+			results, err := app.HTTPClient.ListGroups(ctx)
+			if err != nil {
+				return err
+			}
+
+			format := "%s\t%s\t%s\t%s\n"
+			headers := []interface{}{"Group ID", "Name", "Created", "Last Modified"}
+			if err := renderTable(os.Stdout, results, format, headers); err != nil {
+				return fmt.Errorf("list groups failed to render table: %+v", err)
+			}
+
+			return nil
+		},
+	}
 }
 
 // NewCmdListProjects list projects sub command.
@@ -117,22 +143,19 @@ func renderTable(w io.Writer, results interface{}, format string, headers []inte
 	fmt.Fprintf(tw, format, headers...)
 
 	switch list := results.(type) {
+	case []http.Group:
+		for _, v := range list {
+			row := []interface{}{v.ID, v.Name, v.CreatedAt, v.ModifiedAt}
+			fmt.Fprintf(tw, format, row...)
+		}
 	case []http.Project:
 		for _, v := range list {
-			row := []interface{}{
-				v.ID,
-				v.Name,
-				v.CreatedAt,
-			}
+			row := []interface{}{v.ID, v.Name, v.CreatedAt}
 			fmt.Fprintf(tw, format, row...)
 		}
 	case []http.Template:
 		for _, v := range list {
-			row := []interface{}{
-				v.ID,
-				v.GroupID,
-				v.CreatedAt,
-			}
+			row := []interface{}{v.ID, v.GroupID, v.CreatedAt}
 			fmt.Fprintf(tw, format, row...)
 		}
 

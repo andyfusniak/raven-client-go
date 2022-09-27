@@ -78,15 +78,38 @@ func (c *Client) ListProjects(ctx context.Context, userID string) ([]Project, er
 		"userId": []string{userID},
 	}
 	uri := c.buildURL("projects", query)
-
 	res, err := c.request(http.MethodGet, uri.String(), nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "http get request failed")
 	}
 	defer res.Body.Close()
 
+	// json decode
 	var container struct {
 		Data []Project `json:"data"`
+	}
+	dec := json.NewDecoder(res.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&container); err != nil {
+		return nil, errors.Wrapf(err, "json decode list projects")
+	}
+	return container.Data, nil
+}
+
+// ListGroups fetches a slice of groups for the current project.
+func (c *Client) ListGroups(ctx context.Context) ([]Group, error) {
+	// build the URL including query params
+	query := url.Values{"projectId": []string{"project-1"}}
+	uri := c.buildURL("groups", query)
+	res, err := c.request(http.MethodGet, uri.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "http get request failed")
+	}
+	defer res.Body.Close()
+
+	// json decode
+	var container struct {
+		Data []Group `json:"data"`
 	}
 	dec := json.NewDecoder(res.Body)
 	dec.DisallowUnknownFields()
@@ -101,7 +124,6 @@ func (c *Client) ListTemplates(ctx context.Context) ([]Template, error) {
 	// build the URL including query params
 	query := url.Values{"projectId": []string{"project-1"}}
 	uri := c.buildURL("templates", query)
-
 	res, err := c.request(http.MethodGet, uri.String(), nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "http get request failed")
