@@ -114,7 +114,7 @@ func (c *Client) ListGroups(ctx context.Context) ([]Group, error) {
 	dec := json.NewDecoder(res.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&container); err != nil {
-		return nil, errors.Wrapf(err, "json decode list projects")
+		return nil, errors.Wrapf(err, "json decode list groups")
 	}
 	return container.Data, nil
 }
@@ -137,6 +137,28 @@ func (c *Client) ListTemplates(ctx context.Context) ([]Template, error) {
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&container); err != nil {
 		return nil, errors.Wrapf(err, "json decode list templates")
+	}
+	return container.Data, nil
+}
+
+// ListTransports fetches a slice of transports for the current project.
+func (c *Client) ListTransports(ctx context.Context) ([]Transport, error) {
+	// build the URL including query params
+	query := url.Values{"projectId": []string{"project-1"}}
+	uri := c.buildURL("transports", query)
+	res, err := c.request(http.MethodGet, uri.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "http get request failed")
+	}
+	defer res.Body.Close()
+
+	var container struct {
+		Data []Transport `json:"data"`
+	}
+	dec := json.NewDecoder(res.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&container); err != nil {
+		return nil, errors.Wrapf(err, "json decode list transports")
 	}
 	return container.Data, nil
 }

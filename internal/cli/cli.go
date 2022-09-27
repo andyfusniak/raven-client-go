@@ -54,6 +54,7 @@ func NewCmdList() *cobra.Command {
 	cmd.AddCommand(NewCmdListGroups())
 	cmd.AddCommand(NewCmdListProjects())
 	cmd.AddCommand(NewCmdListTemplates())
+	cmd.AddCommand(NewCmdListTransports())
 	return cmd
 }
 
@@ -137,6 +138,29 @@ func NewCmdListTemplates() *cobra.Command {
 	}
 }
 
+// NewCmdListTransports list transports sub command.
+func NewCmdListTransports() *cobra.Command {
+	return &cobra.Command{
+		Use:   "transports",
+		Short: "List transports",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			app := ctx.Value(AppKey("app")).(*App)
+
+			results, err := app.HTTPClient.ListTransports(ctx)
+			if err != nil {
+				return err
+			}
+
+			format := "%s\t%s\t%v\t%s\t%v\n"
+			headers := []interface{}{"Transport ID", "Host:Port", "IsActive", "Username", "Created"}
+			if err := renderTable(os.Stdout, results, format, headers); err != nil {
+				return fmt.Errorf("list transports failed to render table: %+v", err)
+			}
+			return nil
+		},
+	}
+}
 func renderTable(w io.Writer, results interface{}, format string, headers []interface{}) error {
 	tw := new(tabwriter.Writer).Init(w, 0, 8, 2, ' ', 0)
 
@@ -158,7 +182,11 @@ func renderTable(w io.Writer, results interface{}, format string, headers []inte
 			row := []interface{}{v.ID, v.GroupID, v.CreatedAt}
 			fmt.Fprintf(tw, format, row...)
 		}
-
+	case []http.Transport:
+		for _, v := range list {
+			row := []interface{}{v.ID, fmt.Sprintf("%s:%d", v.Host, v.Port), v.IsActive, v.Username, v.CreatedAt}
+			fmt.Fprintf(tw, format, row...)
+		}
 	default:
 		return fmt.Errorf("unknown results type")
 	}
