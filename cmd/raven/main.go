@@ -15,6 +15,7 @@ var endpoint string
 var gitCommit string
 
 func main() {
+
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "[run] error: %+v", err)
 		os.Exit(1)
@@ -22,6 +23,11 @@ func main() {
 }
 
 func run() error {
+	// allow RAVEN_ENDPOINT override
+	if envEndpoint, ok := os.LookupEnv("RAVEN_ENDPOINT"); ok {
+		endpoint = envEndpoint
+	}
+
 	ravenHTTPClient, err := http.NewClient(http.Config{
 		Endpoint: endpoint,
 		Timeout:  http.DefaultTimout,
