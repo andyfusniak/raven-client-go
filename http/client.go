@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -119,6 +120,51 @@ func (c *Client) ListGroups(ctx context.Context) ([]Group, error) {
 	return container.Data, nil
 }
 
+// CreateTemplate HTTP POST /templates/{id}
+func (c *Client) CreateTemplate(ctx context.Context, params *CreateTemplateParams) (*Template, error) {
+	uri := c.buildURL(fmt.Sprintf("templates/%s", params.ID), nil)
+	fmt.Println(uri)
+
+	// request body
+	req := createTemplateRequest{
+		GroupID: params.GroupID,
+		Txt:     params.Txt,
+	}
+	body := new(bytes.Buffer)
+	if err := json.NewEncoder(body).Encode(&req); err != nil {
+		return nil, err
+	}
+	fmt.Println(body.String())
+
+	// post
+	res, err := c.request(http.MethodPut, uri.String(), body)
+	if err != nil {
+		return nil, errors.Wrap(err, "http post request failed")
+	}
+	defer res.Body.Close()
+
+	fmt.Printf("%#v\n", res)
+
+	// 4xx range
+	if res.StatusCode >= 400 && res.StatusCode < 500 {
+		apiErr, err := decodeAPIError(res.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, apiErr
+	}
+
+	var container struct {
+		Data *Template `json:"data"`
+	}
+	dec := json.NewDecoder(res.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&container); err != nil {
+		return nil, errors.Wrapf(err, "json decode get template")
+	}
+	return container.Data, nil
+}
+
 // GetTemplate fetches a single template by id.
 func (c *Client) GetTemplate(ctx context.Context, templateID string) (*Template, error) {
 	uri := c.buildURL(fmt.Sprintf("templates/%s", templateID), nil)
@@ -170,6 +216,29 @@ func (c *Client) ListTemplates(ctx context.Context) ([]Template, error) {
 	return container.Data, nil
 }
 
+// DeleteTemplate deletes the template with the given id.
+func (c *Client) DeleteTemplate(ctx context.Context, templateID string) error {
+	uri := c.buildURL(fmt.Sprintf("templates/%s", templateID), nil)
+	fmt.Println(uri)
+
+	res, err := c.request(http.MethodDelete, uri.String(), nil)
+	if err != nil {
+		return errors.Wrapf(err, "http delete template (%s) request failed", templateID)
+	}
+	defer res.Body.Close()
+
+	// 4xx range
+	if res.StatusCode >= 400 && res.StatusCode < 500 {
+		apiErr, err := decodeAPIError(res.Body)
+		if err != nil {
+			return err
+		}
+		return apiErr
+	}
+
+	return nil
+}
+
 // ListTransports fetches a slice of transports for the current project.
 func (c *Client) ListTransports(ctx context.Context) ([]Transport, error) {
 	// build the URL including query params
@@ -194,10 +263,12 @@ func (c *Client) ListTransports(ctx context.Context) ([]Transport, error) {
 
 func (c *Client) request(method, uri string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest(method, uri, body)
-	req.Header.Set("Accept", "application/json")
+	if method != http.MethodDelete {
+		req.Header.Set("Accept", "application/json")
+	}
 	// req.Header.Set("Authorization", "Bearer "+c.jwt)
 
-	if method == http.MethodPost {
+	if method == http.MethodPost || method == http.MethodPut {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	res, err := c.client.Do(req)

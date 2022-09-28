@@ -47,8 +47,11 @@ func run() error {
 			_ = v.(*cli.App)
 		},
 	}
+	root.AddCommand(cli.NewCmdCreate())
+	root.AddCommand(cli.NewCmdDelete())
 	root.AddCommand(cli.NewCmdGet())
 	root.AddCommand(cli.NewCmdList())
+	root.AddCommand(cli.NewCmdUpdate())
 	root.AddCommand(cli.NewCmdVersion(version, gitCommit, endpoint))
 
 	ctx := context.WithValue(context.Background(), cli.AppKey("app"), appv)

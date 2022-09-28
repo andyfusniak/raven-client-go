@@ -84,6 +84,20 @@ type Template struct {
 	ModifiedAt             time.Time              `json:"modifiedAt"`
 }
 
+// CreateTemplateParams parameters to create a new template.
+type CreateTemplateParams struct {
+	ID      string
+	GroupID string
+	Txt     string
+	HTML    string
+}
+
+type createTemplateRequest struct {
+	GroupID string `json:"groupId,omitempty"`
+	Txt     string `json:"txt"`
+	HTML    string `json:"html"`
+}
+
 // APIError standard response format for Raven Mailer errors.
 type APIError struct {
 	Status  int    `json:"status"`
