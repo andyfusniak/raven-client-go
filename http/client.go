@@ -97,6 +97,40 @@ func (c *Client) ListProjects(ctx context.Context, userID string) ([]Project, er
 	return container.Data, nil
 }
 
+// CreateGroup creates a new named group.
+func (c *Client) CreateGroup(ctx context.Context, projectID, name string) (*Group, error) {
+	type createGroupRequest struct {
+		ProjectID string `json:"projectId"`
+		Name      string `json:"name"`
+	}
+
+	// request body
+	req := createGroupRequest{
+		ProjectID: projectID,
+		Name:      name,
+	}
+	body := new(bytes.Buffer)
+	if err := json.NewEncoder(body).Encode(&req); err != nil {
+		return nil, err
+	}
+
+	// do request
+	uri := c.buildURL("groups", nil)
+	res, err := c.request(http.MethodPost, uri.String(), body)
+	if err != nil {
+		return nil, errors.Wrap(err, "http post request failed")
+	}
+	defer res.Body.Close()
+
+	// 4xx range
+	if res.StatusCode >= 400 && res.StatusCode < 500 {
+		return nil, decodeAPIError(res.Body)
+	}
+
+	// decode response
+	return decodeGroupResponse(res.Body)
+}
+
 // ListGroups fetches a slice of groups for the current project.
 func (c *Client) ListGroups(ctx context.Context) ([]Group, error) {
 	// build the URL including query params
@@ -107,6 +141,11 @@ func (c *Client) ListGroups(ctx context.Context) ([]Group, error) {
 		return nil, errors.Wrap(err, "http get request failed")
 	}
 	defer res.Body.Close()
+
+	// 4xx range
+	if res.StatusCode >= 400 && res.StatusCode < 500 {
+		return nil, decodeAPIError(res.Body)
+	}
 
 	// json decode
 	var container struct {
@@ -120,10 +159,55 @@ func (c *Client) ListGroups(ctx context.Context) ([]Group, error) {
 	return container.Data, nil
 }
 
+// GetGroup fetches a single group by id.
+func (c *Client) GetGroup(ctx context.Context, groupID string) (*Group, error) {
+	uri := c.buildURL(fmt.Sprintf("groups/%s", groupID), nil)
+	res, err := c.request(http.MethodGet, uri.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "http get request failed")
+	}
+	defer res.Body.Close()
+
+	// 4xx range
+	if res.StatusCode >= 400 && res.StatusCode < 500 {
+		return nil, decodeAPIError(res.Body)
+	}
+
+	return decodeGroupResponse(res.Body)
+}
+
+// DeleteGroup deletes a group by id.
+func (c *Client) DeleteGroup(ctx context.Context, groupID string) error {
+	uri := c.buildURL(fmt.Sprintf("groups/%s", groupID), nil)
+	res, err := c.request(http.MethodDelete, uri.String(), nil)
+	if err != nil {
+		return errors.Wrap(err, "http delete request failed")
+	}
+	defer res.Body.Close()
+
+	// 4xx range
+	if res.StatusCode >= 400 && res.StatusCode < 500 {
+		return decodeAPIError(res.Body)
+	}
+
+	return nil
+}
+
+func decodeGroupResponse(r io.Reader) (*Group, error) {
+	var container struct {
+		Data *Group `json:"data"`
+	}
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&container); err != nil {
+		return nil, errors.Wrapf(err, "json decode get group")
+	}
+	return container.Data, nil
+}
+
 // CreateTemplate HTTP POST /templates/{id}
 func (c *Client) CreateTemplate(ctx context.Context, params *CreateTemplateParams) (*Template, error) {
 	uri := c.buildURL(fmt.Sprintf("templates/%s", params.ID), nil)
-	fmt.Println(uri)
 
 	// request body
 	req := createTemplateRequest{
@@ -134,7 +218,6 @@ func (c *Client) CreateTemplate(ctx context.Context, params *CreateTemplateParam
 	if err := json.NewEncoder(body).Encode(&req); err != nil {
 		return nil, err
 	}
-	fmt.Println(body.String())
 
 	// post
 	res, err := c.request(http.MethodPut, uri.String(), body)
@@ -143,15 +226,9 @@ func (c *Client) CreateTemplate(ctx context.Context, params *CreateTemplateParam
 	}
 	defer res.Body.Close()
 
-	fmt.Printf("%#v\n", res)
-
 	// 4xx range
 	if res.StatusCode >= 400 && res.StatusCode < 500 {
-		apiErr, err := decodeAPIError(res.Body)
-		if err != nil {
-			return nil, err
-		}
-		return nil, apiErr
+		return nil, decodeAPIError(res.Body)
 	}
 
 	var container struct {
@@ -176,11 +253,7 @@ func (c *Client) GetTemplate(ctx context.Context, templateID string) (*Template,
 
 	// 4xx range
 	if res.StatusCode >= 400 && res.StatusCode < 500 {
-		apiErr, err := decodeAPIError(res.Body)
-		if err != nil {
-			return nil, err
-		}
-		return nil, apiErr
+		return nil, decodeAPIError(res.Body)
 	}
 
 	var container struct {
@@ -229,11 +302,7 @@ func (c *Client) DeleteTemplate(ctx context.Context, templateID string) error {
 
 	// 4xx range
 	if res.StatusCode >= 400 && res.StatusCode < 500 {
-		apiErr, err := decodeAPIError(res.Body)
-		if err != nil {
-			return err
-		}
-		return apiErr
+		return decodeAPIError(res.Body)
 	}
 
 	return nil
@@ -278,12 +347,12 @@ func (c *Client) request(method, uri string, body io.Reader) (*http.Response, er
 	return res, nil
 }
 
-func decodeAPIError(r io.Reader) (*APIError, error) {
+func decodeAPIError(r io.Reader) error {
 	var apiErr APIError
 	dec := json.NewDecoder(r)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&apiErr); err != nil {
-		return nil, err
+		return err
 	}
-	return nil, &apiErr
+	return &apiErr
 }

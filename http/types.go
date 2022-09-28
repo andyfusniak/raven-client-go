@@ -11,6 +11,7 @@ const (
 	ErrCodeProjectNotFound        = "projects/project-not-found"
 	ErrCodeProjectSlugExist       = "projects/project-slug-exists"
 	ErrCodeProjectSlugInvalid     = "projects/project-slug-invalid"
+	ErrCodeGroupIDInvalid         = "groups/group-id-invalid"
 	ErrCodeGroupNotFound          = "groups/group-not-found"
 	ErrCodeGroupContainsTemplates = "groups/group-contains-templates"
 	ErrCodeTransportNotFound      = "transports/transport-not-found"
