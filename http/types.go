@@ -1,6 +1,25 @@
 package http
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
+
+const (
+	ErrCodeUserNotFound           = "users/user-not-found"
+	ErrCodeUserIDAttribInvalid    = "users/user-id-invalid"
+	ErrCodeProjectNotFound        = "projects/project-not-found"
+	ErrCodeProjectSlugExist       = "projects/project-slug-exists"
+	ErrCodeProjectSlugInvalid     = "projects/project-slug-invalid"
+	ErrCodeGroupNotFound          = "groups/group-not-found"
+	ErrCodeGroupContainsTemplates = "groups/group-contains-templates"
+	ErrCodeTransportNotFound      = "transports/transport-not-found"
+	ErrCodeTemplateNotFound       = "templates/template-not-found"
+	ErrCodeTemplateExists         = "templates/template-exists"
+	ErrCodeMailTemplateParse      = "email/email-template-parse-failure"
+	ErrCodeMailTemplateExecute    = "email/email-template-execute-failure"
+	ErrCodeBadRequest             = "bad-request"
+)
 
 // Project resource.
 type Project struct {
@@ -63,4 +82,17 @@ type Template struct {
 	ErrorsHTML             TemplateParseError     `json:"htmlErrors"`
 	CreatedAt              time.Time              `json:"createdAt"`
 	ModifiedAt             time.Time              `json:"modifiedAt"`
+}
+
+// APIError standard response format for Raven Mailer errors.
+type APIError struct {
+	Status  int    `json:"status"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// Error string representation of an APIError.
+func (e *APIError) Error() string {
+	return fmt.Sprintf("Status: %d Code: %s Message: %s",
+		e.Status, e.Code, e.Message)
 }

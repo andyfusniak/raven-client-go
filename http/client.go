@@ -128,6 +128,15 @@ func (c *Client) GetTemplate(ctx context.Context, templateID string) (*Template,
 	}
 	defer res.Body.Close()
 
+	// 4xx range
+	if res.StatusCode >= 400 && res.StatusCode < 500 {
+		apiErr, err := decodeAPIError(res.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, apiErr
+	}
+
 	var container struct {
 		Data *Template `json:"data"`
 	}
@@ -196,4 +205,14 @@ func (c *Client) request(method, uri string, body io.Reader) (*http.Response, er
 		return nil, errors.Wrapf(err, "do HTTP %s request", req.Method)
 	}
 	return res, nil
+}
+
+func decodeAPIError(r io.Reader) (*APIError, error) {
+	var apiErr APIError
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&apiErr); err != nil {
+		return nil, err
+	}
+	return nil, &apiErr
 }

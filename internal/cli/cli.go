@@ -231,6 +231,14 @@ func NewCmdGetTemplate() *cobra.Command {
 			templateID := args[0]
 			result, err := app.HTTPClient.GetTemplate(ctx, templateID)
 			if err != nil {
+				if t, ok := err.(*http.APIError); ok {
+					if t.Code == http.ErrCodeTemplateNotFound {
+						fmt.Fprintf(os.Stderr,
+							"Template %q not found - use raven list templates for a full list.\n",
+							templateID)
+						os.Exit(1)
+					}
+				}
 				return err
 			}
 
