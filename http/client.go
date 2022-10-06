@@ -97,6 +97,29 @@ func (c *Client) ListProjects(ctx context.Context, userID string) ([]Project, er
 	return container.Data, nil
 }
 
+// ListTransports fetches a slice of transports for the current project.
+func (c *Client) ListTransports(ctx context.Context, projectID string) ([]Transport, error) {
+	// build the URL including query params
+	path := fmt.Sprintf("projects/%s/transports", projectID)
+	uri := c.buildURL(path, nil)
+	fmt.Printf("%s\n", uri)
+	res, err := c.request(http.MethodGet, uri.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "http get request failed")
+	}
+	defer res.Body.Close()
+
+	var container struct {
+		Data []Transport `json:"data"`
+	}
+	dec := json.NewDecoder(res.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&container); err != nil {
+		return nil, errors.Wrapf(err, "json decode list transports")
+	}
+	return container.Data, nil
+}
+
 // CreateGroup creates a new named group.
 func (c *Client) CreateGroup(ctx context.Context, projectID, name string) (*Group, error) {
 	type createGroupRequest struct {
@@ -115,7 +138,8 @@ func (c *Client) CreateGroup(ctx context.Context, projectID, name string) (*Grou
 	}
 
 	// do request
-	uri := c.buildURL("groups", nil)
+	path := fmt.Sprintf("projects/%s/groups", projectID)
+	uri := c.buildURL(path, nil)
 	res, err := c.request(http.MethodPost, uri.String(), body)
 	if err != nil {
 		return nil, errors.Wrap(err, "http post request failed")
@@ -132,10 +156,10 @@ func (c *Client) CreateGroup(ctx context.Context, projectID, name string) (*Grou
 }
 
 // ListGroups fetches a slice of groups for the current project.
-func (c *Client) ListGroups(ctx context.Context) ([]Group, error) {
+func (c *Client) ListGroups(ctx context.Context, projectID string) ([]Group, error) {
 	// build the URL including query params
-	query := url.Values{"projectId": []string{"project-1"}}
-	uri := c.buildURL("groups", query)
+	path := fmt.Sprintf("projects/%s/groups", projectID)
+	uri := c.buildURL(path, nil)
 	res, err := c.request(http.MethodGet, uri.String(), nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "http get request failed")
@@ -160,8 +184,9 @@ func (c *Client) ListGroups(ctx context.Context) ([]Group, error) {
 }
 
 // GetGroup fetches a single group by id.
-func (c *Client) GetGroup(ctx context.Context, groupID string) (*Group, error) {
-	uri := c.buildURL(fmt.Sprintf("groups/%s", groupID), nil)
+func (c *Client) GetGroup(ctx context.Context, projectID, groupID string) (*Group, error) {
+	path := fmt.Sprintf("projects/%s/groups/%s", projectID, groupID)
+	uri := c.buildURL(path, nil)
 	res, err := c.request(http.MethodGet, uri.String(), nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "http get request failed")
@@ -177,8 +202,9 @@ func (c *Client) GetGroup(ctx context.Context, groupID string) (*Group, error) {
 }
 
 // DeleteGroup deletes a group by id.
-func (c *Client) DeleteGroup(ctx context.Context, groupID string) error {
-	uri := c.buildURL(fmt.Sprintf("groups/%s", groupID), nil)
+func (c *Client) DeleteGroup(ctx context.Context, projectID, groupID string) error {
+	path := fmt.Sprintf("projects/%s/groups/%s", projectID, groupID)
+	uri := c.buildURL(path, nil)
 	res, err := c.request(http.MethodDelete, uri.String(), nil)
 	if err != nil {
 		return errors.Wrap(err, "http delete request failed")
@@ -193,6 +219,82 @@ func (c *Client) DeleteGroup(ctx context.Context, groupID string) error {
 	return nil
 }
 
+// ListMail fetches a list of mail resources.
+func (c *Client) ListMail(ctx context.Context, projectID string) ([]Mail, error) {
+	// build the URL including query params
+	path := fmt.Sprintf("projects/%s/mail", projectID)
+	uri := c.buildURL(path, nil)
+
+	res, err := c.request(http.MethodGet, uri.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "http get request failed")
+	}
+	defer res.Body.Close()
+
+	// 4xx range
+	if res.StatusCode >= 400 && res.StatusCode < 500 {
+		return nil, decodeAPIError(res.Body)
+	}
+
+	// json decode
+	var container struct {
+		Data []Mail `json:"data"`
+	}
+	dec := json.NewDecoder(res.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&container); err != nil {
+		return nil, errors.Wrapf(err, "json decode list mail")
+	}
+	return container.Data, nil
+}
+
+// ListMailLogs fetches a list of mail log resources for the given mail entry.
+func (c *Client) ListMailLogs(ctx context.Context, projectID, mailID string) ([]MailLog, error) {
+	// build the URL including query params
+	path := fmt.Sprintf("projects/%s/mail/%s/logs", projectID, mailID)
+	uri := c.buildURL(path, nil)
+
+	res, err := c.request(http.MethodGet, uri.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "http get request failed")
+	}
+	defer res.Body.Close()
+
+	// 4xx range
+	if res.StatusCode >= 400 && res.StatusCode < 500 {
+		return nil, decodeAPIError(res.Body)
+	}
+
+	// json decode
+	var container struct {
+		Data []MailLog `json:"data"`
+	}
+	dec := json.NewDecoder(res.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&container); err != nil {
+		return nil, errors.Wrapf(err, "json decode list mail logs")
+	}
+	return container.Data, nil
+}
+
+// GetMail fetches a single mail resource.
+func (c *Client) GetMail(ctx context.Context, projectID, mailID string) (*Mail, error) {
+	path := fmt.Sprintf("projects/%s/mail/%s", projectID, mailID)
+	uri := c.buildURL(path, nil)
+	res, err := c.request(http.MethodGet, uri.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "http get request failed")
+	}
+	defer res.Body.Close()
+
+	// 4xx range
+	if res.StatusCode >= 400 && res.StatusCode < 500 {
+		return nil, decodeAPIError(res.Body)
+	}
+
+	return decodeMailResponse(res.Body)
+}
+
 func decodeGroupResponse(r io.Reader) (*Group, error) {
 	var container struct {
 		Data *Group `json:"data"`
@@ -205,9 +307,22 @@ func decodeGroupResponse(r io.Reader) (*Group, error) {
 	return container.Data, nil
 }
 
+func decodeMailResponse(r io.Reader) (*Mail, error) {
+	var container struct {
+		Data *Mail `json:"data"`
+	}
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&container); err != nil {
+		return nil, errors.Wrapf(err, "json decode get mail")
+	}
+	return container.Data, nil
+}
+
 // CreateTemplate HTTP POST /templates/{id}
 func (c *Client) CreateTemplate(ctx context.Context, params *CreateTemplateParams) (*Template, error) {
-	uri := c.buildURL(fmt.Sprintf("templates/%s", params.ID), nil)
+	path := fmt.Sprintf("projects/%s/templates/%s", params.ProjectID, params.ID)
+	uri := c.buildURL(path, nil)
 
 	// request body
 	req := createTemplateRequest{
@@ -243,8 +358,9 @@ func (c *Client) CreateTemplate(ctx context.Context, params *CreateTemplateParam
 }
 
 // GetTemplate fetches a single template by id.
-func (c *Client) GetTemplate(ctx context.Context, templateID string) (*Template, error) {
-	uri := c.buildURL(fmt.Sprintf("templates/%s", templateID), nil)
+func (c *Client) GetTemplate(ctx context.Context, projectID, templateID string) (*Template, error) {
+	path := fmt.Sprintf("projects/%s/templates/%s", projectID, templateID)
+	uri := c.buildURL(path, nil)
 	res, err := c.request(http.MethodGet, uri.String(), nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "http get request failed")
@@ -268,10 +384,10 @@ func (c *Client) GetTemplate(ctx context.Context, templateID string) (*Template,
 }
 
 // ListTemplates fetches a slice of templates for the current project.
-func (c *Client) ListTemplates(ctx context.Context) ([]Template, error) {
+func (c *Client) ListTemplates(ctx context.Context, projectID string) ([]Template, error) {
 	// build the URL including query params
-	query := url.Values{"projectId": []string{"project-1"}}
-	uri := c.buildURL("templates", query)
+	path := fmt.Sprintf("projects/%s/templates", projectID)
+	uri := c.buildURL(path, nil)
 	res, err := c.request(http.MethodGet, uri.String(), nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "http get request failed")
@@ -290,8 +406,9 @@ func (c *Client) ListTemplates(ctx context.Context) ([]Template, error) {
 }
 
 // DeleteTemplate deletes the template with the given id.
-func (c *Client) DeleteTemplate(ctx context.Context, templateID string) error {
-	uri := c.buildURL(fmt.Sprintf("templates/%s", templateID), nil)
+func (c *Client) DeleteTemplate(ctx context.Context, projectID, templateID string) error {
+	path := fmt.Sprintf("projects/%s/templates/%s", projectID, templateID)
+	uri := c.buildURL(path, nil)
 	fmt.Println(uri)
 
 	res, err := c.request(http.MethodDelete, uri.String(), nil)
@@ -306,28 +423,6 @@ func (c *Client) DeleteTemplate(ctx context.Context, templateID string) error {
 	}
 
 	return nil
-}
-
-// ListTransports fetches a slice of transports for the current project.
-func (c *Client) ListTransports(ctx context.Context) ([]Transport, error) {
-	// build the URL including query params
-	query := url.Values{"projectId": []string{"project-1"}}
-	uri := c.buildURL("transports", query)
-	res, err := c.request(http.MethodGet, uri.String(), nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "http get request failed")
-	}
-	defer res.Body.Close()
-
-	var container struct {
-		Data []Transport `json:"data"`
-	}
-	dec := json.NewDecoder(res.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&container); err != nil {
-		return nil, errors.Wrapf(err, "json decode list transports")
-	}
-	return container.Data, nil
 }
 
 func (c *Client) request(method, uri string, body io.Reader) (*http.Response, error) {

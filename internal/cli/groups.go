@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/andyfusniak/raven-client-go/http"
 	"github.com/spf13/cobra"
@@ -21,7 +22,7 @@ func NewCmdCreateGroup() *cobra.Command {
 			app := ctx.Value(AppKey("app")).(*App)
 
 			name := args[0]
-			result, err := app.HTTPClient.CreateGroup(ctx, "project-1", name)
+			result, err := app.HTTPClient.CreateGroup(ctx, app.projectID, name)
 			if err != nil {
 				if terr, ok := err.(*http.APIError); ok {
 					if terr.Code == http.ErrCodeProjectNotFound {
@@ -59,7 +60,7 @@ func NewCmdGetGroup() *cobra.Command {
 			app := ctx.Value(AppKey("app")).(*App)
 
 			groupID := args[0]
-			result, err := app.HTTPClient.GetGroup(ctx, groupID)
+			result, err := app.HTTPClient.GetGroup(ctx, app.projectID, groupID)
 			if err != nil {
 				if terr, ok := err.(*http.APIError); ok {
 					if terr.Code == http.ErrCodeGroupNotFound {
@@ -91,14 +92,14 @@ func NewCmdListGroups() *cobra.Command {
 			ctx := cmd.Context()
 			app := ctx.Value(AppKey("app")).(*App)
 
-			results, err := app.HTTPClient.ListGroups(ctx)
+			results, err := app.HTTPClient.ListGroups(ctx, app.projectID)
 			if err != nil {
 				return err
 			}
 
 			format := "%s\t%s\t%s\t%s\n"
 			headers := []interface{}{"GROUP ID", "NAME", "CREATED", "LAST MODIFIED"}
-			if err := renderTable(os.Stdout, results, format, headers); err != nil {
+			if err := renderTable(os.Stdout, results, format, headers, time.Time{}); err != nil {
 				return fmt.Errorf("list groups failed to render table: %+v", err)
 			}
 
@@ -107,6 +108,7 @@ func NewCmdListGroups() *cobra.Command {
 	}
 }
 
+// NewCmdDeleteGroup delete group sub command.
 func NewCmdDeleteGroup() *cobra.Command {
 	return &cobra.Command{
 		Use:     "group GROUP_ID",
@@ -123,7 +125,7 @@ func NewCmdDeleteGroup() *cobra.Command {
 			app := ctx.Value(AppKey("app")).(*App)
 
 			groupID := args[0]
-			if err := app.HTTPClient.DeleteGroup(ctx, groupID); err != nil {
+			if err := app.HTTPClient.DeleteGroup(ctx, app.projectID, groupID); err != nil {
 				if terr, ok := err.(*http.APIError); ok {
 					if terr.Code == http.ErrCodeGroupNotFound {
 						fmt.Fprintf(os.Stderr, "group %s not found\n", groupID)

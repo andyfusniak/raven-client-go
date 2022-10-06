@@ -7,16 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/andyfusniak/raven-client-go/http"
 	"github.com/spf13/cobra"
 )
-
-const checkMark = "✔"
-const crossMark = "✘"
-
-const heavyGreenCheckMark = "✅"
-const heavyRedCrossMark = "❌"
 
 // NewCmdCreateTemplate update a template
 func NewCmdCreateTemplate() *cobra.Command {
@@ -56,9 +51,10 @@ func NewCmdCreateTemplate() *cobra.Command {
 
 				fmt.Printf("%s\n", templateID)
 				result, err := app.HTTPClient.CreateTemplate(ctx, &http.CreateTemplateParams{
-					ID:      templateID,
-					GroupID: "wC6yNEg79ZQVFQ62y3PD",
-					Txt:     string(txt),
+					ID:        templateID,
+					ProjectID: app.projectID,
+					GroupID:   "wC6yNEg79ZQVFQ62y3PD",
+					Txt:       string(txt),
 				})
 				if err != nil {
 					if terr, ok := err.(*http.APIError); ok {
@@ -96,14 +92,14 @@ func NewCmdListTemplates() *cobra.Command {
 			ctx := cmd.Context()
 			app := ctx.Value(AppKey("app")).(*App)
 
-			results, err := app.HTTPClient.ListTemplates(ctx)
+			results, err := app.HTTPClient.ListTemplates(ctx, app.projectID)
 			if err != nil {
 				return err
 			}
 
 			format := "%s\t%s\t%s\n"
 			headers := []interface{}{"TEMPLATE ID", "GROUP ID", "CREATED"}
-			if err := renderTable(os.Stdout, results, format, headers); err != nil {
+			if err := renderTable(os.Stdout, results, format, headers, time.Time{}); err != nil {
 				return fmt.Errorf("list templates failed to render table: %+v", err)
 			}
 			return nil
@@ -128,7 +124,7 @@ func NewCmdGetTemplate() *cobra.Command {
 			app := ctx.Value(AppKey("app")).(*App)
 
 			templateID := args[0]
-			result, err := app.HTTPClient.GetTemplate(ctx, templateID)
+			result, err := app.HTTPClient.GetTemplate(ctx, app.projectID, templateID)
 			if err != nil {
 				if terr, ok := err.(*http.APIError); ok {
 					if terr.Code == http.ErrCodeTemplateNotFound {
@@ -167,7 +163,7 @@ func NewCmdDeleteTemplate() *cobra.Command {
 			app := ctx.Value(AppKey("app")).(*App)
 
 			templateID := args[0]
-			if err := app.HTTPClient.DeleteTemplate(ctx, templateID); err != nil {
+			if err := app.HTTPClient.DeleteTemplate(ctx, app.projectID, templateID); err != nil {
 				if terr, ok := err.(*http.APIError); ok {
 					if terr.Code == http.ErrCodeTemplateNotFound {
 						fmt.Fprintf(os.Stderr, "template %s not found\n", templateID)
@@ -201,39 +197,18 @@ func baseFilenameWithoutExt(filename string) string {
 	return strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
 }
 
-func checkOrCrossWithStatus(v bool, useHeavy bool) string {
-	if useHeavy {
-		if v {
-			return heavyGreenCheckMark + " Ready"
-		}
-		return heavyRedCrossMark + " Failed to compile"
-	}
-
-	if v {
-		return checkMark + " Ready"
-	}
-	return crossMark + " Failed to compile"
-}
-
-func isTemplateReady(txt, html bool) string {
-	if txt && html {
-		return heavyGreenCheckMark + " Ready"
-	}
-	return heavyRedCrossMark + " Failed to compile"
-}
-
 func renderTemplate(w io.Writer, t *http.Template) error {
-	fmt.Fprintf(w, "Template ID:\t\t%s %s\n", t.ID, isTemplateReady(t.TxtTemplateCompiledOK, t.HTMLTemplateCompiledOK))
+	fmt.Fprintf(w, "Template ID:\t\t%s\n", t.ID)
 	fmt.Fprintf(w, "Project ID:\t\t%s\n", t.ProjectID)
 	fmt.Fprintf(w, "Group ID:\t\t%s\n", t.GroupID)
 	fmt.Fprintf(w, "Last modified:\t\t%v\n", t.ModifiedAt)
 	fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "TEXT: %s %s\n", t.TxtDigest[:7], checkOrCrossWithStatus(t.TxtTemplateCompiledOK, true))
+	fmt.Fprintf(w, "TEXT: %s\n", t.TxtDigest[:7])
 	fmt.Fprintf(w, "%s\n", t.Txt)
 	fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "HTML: %s %s\n", t.HTMLDigest[:7], checkOrCrossWithStatus(t.HTMLTemplateCompiledOK, true))
+	fmt.Fprintf(w, "HTML: %s\n", t.HTMLDigest[:7])
 	fmt.Fprintf(w, "%s\n", t.HTML)
 
 	return nil

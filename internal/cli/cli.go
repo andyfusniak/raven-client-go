@@ -4,11 +4,35 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/andyfusniak/raven-client-go/http"
 	"github.com/spf13/cobra"
 )
+
+const checkMark = "✔"
+const crossMark = "✘"
+
+const heavyGreenCheckMark = "✅"
+const heavyRedCrossMark = "❌"
+
+const redCircle = "🔴"
+const redSquare = "🟥"
+
+const greenCircle = "🟢"
+const greenSquare = "🟩"
+
+const blueCircle = "🔵"
+const blueSquare = "🟦"
+
+const yellowCircle = "🟡"
+const yellowSquare = "🟨"
+
+const rewind = "↻"
+const publishedEmoji = "📝"
+const envelopeEmoji = "🖃"
 
 // AppKey context key
 type AppKey string
@@ -18,6 +42,7 @@ type App struct {
 	version    string
 	endpoint   string
 	gitCommit  string
+	projectID  string
 	HTTPClient *http.Client
 }
 
@@ -32,6 +57,7 @@ type Config struct {
 // NewApp creates a new CLI application.
 func NewApp(c Config) *App {
 	return &App{
+		projectID:  "the-cloud-company",
 		version:    c.Version,
 		endpoint:   c.Endpoint,
 		gitCommit:  c.GitCommit,
@@ -61,10 +87,12 @@ func NewCmdList() *cobra.Command {
 		Use:   "list",
 		Short: "List resources",
 	}
-	cmd.AddCommand(NewCmdListGroups())
 	cmd.AddCommand(NewCmdListProjects())
-	cmd.AddCommand(NewCmdListTemplates())
 	cmd.AddCommand(NewCmdListTransports())
+	cmd.AddCommand(NewCmdListGroups())
+	cmd.AddCommand(NewCmdListTemplates())
+	cmd.AddCommand(NewCmdListMail())
+	cmd.AddCommand(NewCmdListMailLogs())
 	return cmd
 }
 
@@ -76,6 +104,7 @@ func NewCmdGet() *cobra.Command {
 	}
 	cmd.AddCommand(NewCmdGetGroup())
 	cmd.AddCommand(NewCmdGetTemplate())
+	cmd.AddCommand(NewCmdGetMail())
 	return cmd
 }
 
@@ -116,8 +145,8 @@ func NewCmdListProjects() *cobra.Command {
 			}
 
 			format := "%s\t%s\t%s\n"
-			headers := []interface{}{"Project ID", "Name", "Created"}
-			if err := renderTable(os.Stdout, results, format, headers); err != nil {
+			headers := []interface{}{"PROJECT ID", "NAME", "CREATED"}
+			if err := renderTable(os.Stdout, results, format, headers, time.Time{}); err != nil {
 				return fmt.Errorf("list projects failed to render table: %+v", err)
 			}
 
@@ -136,14 +165,20 @@ func NewCmdListTransports() *cobra.Command {
 			ctx := cmd.Context()
 			app := ctx.Value(AppKey("app")).(*App)
 
-			results, err := app.HTTPClient.ListTransports(ctx)
+			results, err := app.HTTPClient.ListTransports(ctx, app.projectID)
 			if err != nil {
 				return err
 			}
 
 			format := "%s\t%s\t%v\t%s\t%v\n"
-			headers := []interface{}{"Transport ID", "Host:Port", "IsActive", "Username", "Created"}
-			if err := renderTable(os.Stdout, results, format, headers); err != nil {
+			headers := []interface{}{
+				"TRANSPORT ID",
+				"HOST:PORT",
+				"ACTIVE",
+				"USERNAME",
+				"CREATED",
+			}
+			if err := renderTable(os.Stdout, results, format, headers, time.Time{}); err != nil {
 				return fmt.Errorf("list transports failed to render table: %+v", err)
 			}
 			return nil
@@ -151,20 +186,31 @@ func NewCmdListTransports() *cobra.Command {
 	}
 }
 
-func renderTable(w io.Writer, results interface{}, format string, headers []interface{}) error {
+func renderTable(w io.Writer, results interface{}, format string, headers []interface{}, rel time.Time) error {
 	tw := new(tabwriter.Writer).Init(w, 0, 8, 2, ' ', 0)
 
 	fmt.Fprintf(tw, format, headers...)
 
 	switch list := results.(type) {
-	case []http.Group:
-		for _, v := range list {
-			row := []interface{}{v.ID, v.Name, v.CreatedAt, v.ModifiedAt}
-			fmt.Fprintf(tw, format, row...)
-		}
 	case []http.Project:
 		for _, v := range list {
 			row := []interface{}{v.ID, v.Name, v.CreatedAt}
+			fmt.Fprintf(tw, format, row...)
+		}
+	case []http.Transport:
+		for _, v := range list {
+			row := []interface{}{
+				v.ID,
+				fmt.Sprintf("%s:%d", v.Host, v.Port),
+				renderTransportActive(v.Active),
+				v.Username,
+				v.CreatedAt,
+			}
+			fmt.Fprintf(tw, format, row...)
+		}
+	case []http.Group:
+		for _, v := range list {
+			row := []interface{}{v.ID, v.Name, v.CreatedAt, v.ModifiedAt}
 			fmt.Fprintf(tw, format, row...)
 		}
 	case []http.Template:
@@ -172,9 +218,28 @@ func renderTable(w io.Writer, results interface{}, format string, headers []inte
 			row := []interface{}{v.ID, v.GroupID, v.CreatedAt}
 			fmt.Fprintf(tw, format, row...)
 		}
-	case []http.Transport:
+	case []http.Mail:
 		for _, v := range list {
-			row := []interface{}{v.ID, fmt.Sprintf("%s:%d", v.Host, v.Port), v.IsActive, v.Username, v.CreatedAt}
+			row := []interface{}{
+				v.ID,
+				v.TemplateID,
+				renderMailStatus(v.Status),
+				v.EmailTo,
+				v.CreatedAt,
+				renderMailSentAt(v.SentAt),
+			}
+			fmt.Fprintf(tw, format, row...)
+		}
+	case []http.MailLog:
+		size := len(list)
+		for i, v := range list {
+			row := []interface{}{
+				renderIndent(i, size) + " " + v.ID,
+				renderMailStatus(v.Status),
+				v.SMTPCode,
+				v.Msg,
+				renderRelativeTime(rel, v.CreatedAt),
+			}
 			fmt.Fprintf(tw, format, row...)
 		}
 	default:
@@ -185,6 +250,45 @@ func renderTable(w io.Writer, results interface{}, format string, headers []inte
 		return err
 	}
 	return nil
+}
+
+func renderTransportActive(a bool) string {
+	if a {
+		return "✔"
+	}
+	return " "
+}
+
+func renderIndent(i, size int) string {
+	if i >= size-1 {
+		return "└──"
+	}
+	return "├──"
+}
+
+func renderRelativeTime(u, t time.Time) string {
+	return fmt.Sprintf("%s", t.Sub(u))
+}
+
+func renderMailSentAt(t *time.Time) string {
+	if t == nil {
+		return "Not sent"
+	}
+	return t.Format(time.RFC1123)
+}
+
+func renderMailStatus(s string) string {
+	switch s {
+	case "pending":
+		return "↓ " + strings.Title(s) // 💾, ⛁, ↓, ▼
+	case "published":
+		return "→ " + strings.Title(s) // 🖧, →
+	case "received":
+		return "← " + strings.Title(s) // or 🖃
+	case "delivered":
+		return "✔ " + strings.Title(s)
+	}
+	return s
 }
 
 // NewCmdVersion returns an instance of the version sub command.
